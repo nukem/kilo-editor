@@ -1,4 +1,4 @@
-/*** includes ***/
+/***includes ***/
 
 #include <ctype.h>
 #include <errno.h>
@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -28,10 +29,17 @@ enum editorKey {
 
 /*** data ***/
 
+typedef struct erow {
+    int size;
+    char *chars;
+} erow;
+
 struct editorConfig {
     int cx,cy; 
     int screenrows;
     int screencols;
+    int numrows;
+    erow row;
     struct termios orig_termios;
 };
 
@@ -151,6 +159,19 @@ int getWindowSize(int *rows, int *cols) {
     }
 }
 
+/*** file i/o ***/
+
+void editorOpen() {
+    char *line = "Hello world!";
+    ssize_t linelen = 13;
+
+    E.row.size = linelen;
+    E.row.chars = malloc(linelen + 1);
+    memcpy(E.row.chars, line, linelen);
+    E.row.chars[linelen] = '\0';
+    E.numrows = 1;
+}
+
 /*** append buffer ***/
 
 struct abuf {
@@ -178,6 +199,7 @@ void abFree(struct abuf *ab) {
 void editorDrawRows(struct abuf *ab) {
     int y;
     for (y = 0; y < E.screenrows; y++) {
+      if ( y >= E.numrows) {
 	if (y == E.screenrows / 3) {
 	    char welcome[80];
 	    int welcomelen = snprintf(welcome, sizeof(welcome),
@@ -194,6 +216,11 @@ void editorDrawRows(struct abuf *ab) {
 	} else {
 	    abAppend(ab, "~", 1);
 	}
+      } else {
+	  int len = E.row.size;
+	  if (len > E.screencols) len = E.screencols;
+	  abAppend(ab, E.row.chars, len);
+      }
 
 	abAppend(ab, "\x1b[K", 3);	// clear current line before redraw
 	if (y < E.screenrows - 1) {
@@ -278,6 +305,7 @@ void editorProcessKeypress() {
 void initEditor() {
     E.cx = 0;
     E.cy = 0;
+    E.numrows = 0;
 
     if (getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
 }
@@ -285,6 +313,7 @@ void initEditor() {
 int main() {
     enableRawMode();
     initEditor();
+    editorOpen();
 
     while (1) {
 	editorRefreshScreen();
